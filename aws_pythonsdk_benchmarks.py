@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 import base64
 
-client = boto3.client('ec2')
+
 
 # This function launches one or more EC2 instance 
 # using the input parameters provided
@@ -19,7 +19,7 @@ def launch_test(instance_type,count,max_price,zone,volumesize):
 	'us-east-1e':'subnet-b58e2988'}
 		
 	# Convert boot script into base64 data
-	with open('/Users/pete/src/AWS/aws_bootscript_multiproc.sh','r') as f:
+	with open('/Users/pete/src/AWS/launchscripts/aws_bootscript_multiproc.sh','r') as f:
 		userdata=base64.b64encode(f.read())
 	
 	# Write out launch specification json file
@@ -99,17 +99,24 @@ volume_size={'c4.large':8,
 ### Launch instances in best availability zone ###
 #
 def launch_instances():
+
+	# region hard coded for now 
+	# launch_test only uses the region specified in the testuser config profile
+	# This is set in ~/.aws/config, so the following region needs to be consistent with that. 
+	region='us-east-1'
+	client = boto3.client('ec2',region_name=region)
+	
 	### Just test a few instances at a time ###
 	#
 	#instances=['c3.2xlarge','c4.4xlarge','cc2.8xlarge','m3.large']
-	#instances=['c4.large','c4.xlarge','c4.2xlarge','c4.8xlarge']
-	#instances=['m4.xlarge','m4.2xlarge','m4.4xlarge','m4.10xlarge']
-	#instances=['m3.medium','m3.xlarge','m3.2xlarge','m4.large']
+	#instances=['c4.large','c4.xlarge','c4.2xlarge','c4.4xlarge','c4.8xlarge']
+	instances=['m4.large','m4.xlarge','m4.2xlarge','m4.4xlarge','m4.10xlarge']
+	#instances=['m3.medium','m3.xlarge','m3.2xlarge',]
 	#instances=['c3.large','c3.xlarge','c3.4xlarge','c3.8xlarge']
 	#instances=['r3.large','r3.xlarge','r3.2xlarge','r3.4xlarge','r3.8xlarge']
 	#instances=['i2.xlarge','i2.2xlarge','i2.4xlarge','i2.8xlarge']
 	#instances=['cr1.8xlarge','hi1.4xlarge']
-	instances=[]
+	#instances=[]
 
 	# Loop over instances and determine lowest current spot price and which availability zone that corresponds to
 	for inst in instances:
@@ -121,11 +128,12 @@ def launch_instances():
 				min_zone=dict['AvailabilityZone']
 				min_price=float(dict['SpotPrice'])
 		# Launch tests for this instance (using bid price of 5 * current price)
-		launch_test(inst,3,5.*min_price,min_zone,volume_size[inst])
+		launch_test(client,inst,2,5.*min_price,min_zone,volume_size[inst])
 
 ### Go through all Instance types and work out best AZ and spot price
 #
-def get_instance_info():
+def get_instance_info(region='us-east-1'):
+	client = boto3.client('ec2',region_name=region)
 	best_zone={}
 	spot_price={}
 

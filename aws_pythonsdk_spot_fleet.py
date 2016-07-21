@@ -8,13 +8,15 @@ from aws_pythonsdk_benchmarks import get_instance_info
 from analyse_benchmarks import get_benchmarks,get_weights
 from copy import deepcopy
 
-client = boto3.client('ec2')
+
 
 # This function launches one or more EC2 instance 
 # using the input parameters provided
 # Submits request though the AWS CLI (TODO could do this natively in python boto3 API)
-def launch_fleet(instance_types,targetCapacity,bootscript,dry_run=False):
+def launch_fleet(instance_types,targetCapacity,bootscript,dry_run=False,region='us-east-1'):
 
+	client = boto3.client('ec2',region_name=region)
+	
 	print "Getting instance info..."
 	instance_price=get_instance_info()
 	print "Got prices"
@@ -23,11 +25,27 @@ def launch_fleet(instance_types,targetCapacity,bootscript,dry_run=False):
 	weights=get_weights(types,runs)
 	print "Got weighting factors"
 
-	# Dictionary of availability zones and the subnet to use for each. 
-	subnet_map={'us-east-1a':'subnet-5a4b8b03',
-	'us-east-1c':'subnet-f08a69db',
-	'us-east-1d':'subnet-ec95349b',
-	'us-east-1e':'subnet-b58e2988'}
+	if region=='us-east-1':
+		ami_image="ami-fce3c696" # Ubuntu 14.04
+		security_group="sg-32b55654" # Allow ssh
+		# Dictionary of availability zones and the subnet to use for each. 
+		subnet_map={
+		'us-east-1a':'subnet-5a4b8b03',
+		'us-east-1c':'subnet-f08a69db',
+		'us-east-1d':'subnet-ec95349b',
+		'us-east-1e':'subnet-b58e2988'
+		}
+		key='pu_key'
+	elif region=='us-west-2':
+		ami_image="ami-9abea4fb" # Ubuntu 14.04
+		security_group='sg-67488a01' # Allow ssh
+		subnet_map={
+		'us-west-2a':'subnet-22ebde47',
+		'us-west-2c':'subnet-8b0163d2',
+		'us-west-2b':'subnet-df8dc6a8'
+		}
+		key='pu_key_oregon'
+	
 
 	# List of Volume Sizes needed (dependent on number of CPUs):
 	# NOTE: commented out instances are not available with HVM virtualisation 
@@ -77,9 +95,9 @@ def launch_fleet(instance_types,targetCapacity,bootscript,dry_run=False):
 	}
 	
 	launch_template={
-		"ImageId": "ami-fce3c696",
+		"ImageId": ami_image,
 		"InstanceType": "c3.large",
-		"KeyName": "pu_key",
+		"KeyName": key,
 		"EbsOptimized": False,
 		"WeightedCapacity": 2,
 		"SpotPrice": "0.0525",
@@ -91,7 +109,7 @@ def launch_fleet(instance_types,targetCapacity,bootscript,dry_run=False):
 					"DeleteOnTermination": True,
 					"VolumeType": "gp2",
 					"VolumeSize": 8,
-					"SnapshotId": "snap-f70deff0"
+#					"SnapshotId": "snap-f70deff0"
 				}
 			}
 		],
@@ -104,7 +122,7 @@ def launch_fleet(instance_types,targetCapacity,bootscript,dry_run=False):
 				"DeleteOnTermination": True,
 				"AssociatePublicIpAddress": True,
 				"Groups": [
-					"sg-32b55654"
+					security_group
 				]
 			}
 		]
@@ -124,7 +142,7 @@ def launch_fleet(instance_types,targetCapacity,bootscript,dry_run=False):
 			launch_spec["InstanceType"]=instance_type
 			launch_spec["WeightedCapacity"]=weights[instance_type]/weights["c4.large"]*2.
 			launch_spec["SpotPrice"]=str(instance_price[instance_type]*5.)
-			launch_spec["BlockDeviceMappings"][0]["Ebs"]["VolumeSize"]=volume_size[instance_type]
+			launch_spec["BlockDeviceMappings"][0]["Ebs"]["VolumeSize"]=volume_size[instance_type]*3 # For Mexico region make disk much larger
 			launch_spec["Placement"]["AvailabilityZone"]=az
 			launch_spec["NetworkInterfaces"][0]["SubnetId"]=subnet
 			launch_spec["UserData"]=userdata
@@ -149,8 +167,10 @@ def launch_fleet(instance_types,targetCapacity,bootscript,dry_run=False):
 #		json.dump(SpotFleetRequestConfig, outfile,indent=4)
 	
 	print "requesting spot fleet..."
-	client.request_spot_fleet(DryRun=dry_run,SpotFleetRequestConfig=SpotFleetRequestConfig)
+	response = client.request_spot_fleet(DryRun=dry_run,SpotFleetRequestConfig=SpotFleetRequestConfig)
 	print "Done"
+	print 'spot fleet id is:',response['SpotFleetRequestId']
+	return response['SpotFleetRequestId']
 
 if __name__=='__main__':
 		### Just test a few instances at a time ###
@@ -165,6 +185,7 @@ if __name__=='__main__':
 	#instances=['cr1.8xlarge','hi1.4xlarge']
 	
 	# Choose 12 cheapest instance types at time (by price per year run)
+	# This is the list for cheapest instances in us-west-2 (oregon)
 	instances=[
 	'm4.4xlarge',
 	'c4.large',
@@ -178,4 +199,4 @@ if __name__=='__main__':
 	'c4.4xlarge',
 	'm3.2xlarge',
 	'r3.large']
-	launch_fleet(instances,4,'aws_bootscript_multiproc.sh',False)
+	spot_fleet_id=launch_fleet(instances,40,'aws_bootscript_boinc.sh',dry_run=False,region='us-west-2')

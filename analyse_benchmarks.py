@@ -53,14 +53,34 @@ def write_timings(types,runs,instance_price,csv_fname):
 			year_run_price=hourly_price*mean_timing/60./vcpus*360.
 			csvwriter.writerow([type,hourly_price,vcpus,mean_timing,runs_per_hour,year_run_price])
 
+def write_pricings(types,runs,regions):
+	header=['Instance type','vCPUs']+regions
+	reg_pricings={}
+	for reg in regions:
+		reg_pricings[reg]=get_instance_info(region=reg)
+	with open('pricings.csv', 'wb') as csvfile:
+		csvwriter = csv.writer(csvfile)
+		csvwriter.writerow(header)
+		
+		for type in types:
+			vcpus=0
+			mean_timing=0.
+			n=len(runs[type])
+			for id,timings in runs[type].iteritems():
+				vcpus=max(vcpus,len(timings))
+				mean_timing+=timings.max()
+			mean_timing=mean_timing/n
+			if mean_timing>45.: continue # Skip really slow instance types
+			vcpus=vcpus
+			row=[type,vcpus]
+			for reg in regions:
+				row.append(reg_pricings[reg][type]*mean_timing/60./vcpus*360.)
+			csvwriter.writerow(row)
 
 
-def get_benchmarks(instance_price=False,new_benchmarks=False):
+def get_benchmarks(new_benchmarks=False):
 ### Check for any new benchmark tests ###
 #
-
-	if not instance_price:
-		instance_price=get_instance_info()
 
 	if new_benchmarks:
 		os.system('aws s3 sync s3://benchmarkinglogs ../benchmarking/benchmarkinglogs')
@@ -81,9 +101,9 @@ def get_benchmarks(instance_price=False,new_benchmarks=False):
 		
 			# Get instance info
 			arr=instance.split('/')
-			run_name=arr[1]
-			instance_type=arr[2]
-			tmp=arr[3].split('_')
+			run_name=arr[3]
+			instance_type=arr[4]
+			tmp=arr[5].split('_')
 			instance_id=tmp[1]
 			instance_proc=tmp[2].split('.')[0]
 		
@@ -120,9 +140,11 @@ def get_weights(types,runs):
 
 
 if __name__=='__main__':
-	instance_price=get_instance_info()
-	types,runs=get_benchmarks()
-	write_timings(types,runs,instance_price,'instance_comparison.csv')
-	print get_weights(types,runs)
-#plot_timings(types,runs)
-		
+	regions=['us-east-1','us-west-1','us-west-2']
+	types,runs=get_benchmarks(new_benchmarks=False)
+#	for region in regions:
+#		instance_price=get_instance_info(region=region)
+#		write_timings(types,runs,instance_price,'instance_comparison_'+region+'.csv')
+#	print get_weights(types,runs)
+	plot_timings(types,runs)
+#	write_pricings(types,runs,regions)
