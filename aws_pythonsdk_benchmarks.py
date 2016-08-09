@@ -1,9 +1,10 @@
 #!/usr/bin/python
 # Script to do stuff with the python AWS API, boto3
 import boto3
-from datetime import datetime
+from datetime import datetime,timedelta
 import os
 import base64
+import numpy as np
 
 
 
@@ -154,6 +155,47 @@ def get_instance_info(region='us-east-1'):
 #		print inst,best_zone[inst],spot_price[inst]
 	
 	return spot_price
+	
+### Go through all Instance types and filter out ones with volatile spot prices
+#
+def instances_filtered(instances,region='us-east-1',period=7):
+	client = boto3.client('ec2',region_name=region)
+	instances_ok={}
+	
+	# Loop over instances and determine lowest current spot price and which availability zone that corresponds to
+	for inst in instances:
+		prices=client.describe_spot_price_history(StartTime=datetime.now()-timedelta(days=period),InstanceTypes=[inst], ProductDescriptions=['Linux/UNIX (Amazon VPC)'])['SpotPriceHistory']
+		price_arrs={}
+		for dict in prices:
+			az=dict['AvailabilityZone']
+			price=dict['SpotPrice']
+			# initialise max price for AZ
+			if not price_arrs.has_key(az):
+				price_arrs[az]=np.array([float(price)])
+			else:
+				price_arrs[az]=np.append(price_arrs[az],[float(price)])
+			
+		for az,arr in price_arrs.iteritems():
+			# Use threshold of Max 10 times greater than min
+			if arr.max()<arr.min()*5:
+				if not instances_ok.has_key(inst):
+					instances_ok[inst]=[az]
+				else:
+					instances_ok[inst].append(az)
+			else:
+				print 'Error price too volitile:',inst,az
+					
+	return instances_ok
+		
+	
+#	instances=volume_size.keys()
+#	instances.sort()
+#	for inst in instances:
+#		print inst,best_zone[inst],spot_price[inst]
+	
+	return spot_price
+	
+	
 		
 if __name__=='__main__':
 	launch_instances()

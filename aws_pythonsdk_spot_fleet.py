@@ -4,7 +4,7 @@ import boto3
 from datetime import datetime,timedelta
 import os
 import base64
-from aws_pythonsdk_benchmarks import get_instance_info
+from aws_pythonsdk_benchmarks import get_instance_info,instances_filtered
 from analyse_benchmarks import get_benchmarks,get_weights
 from copy import deepcopy
 
@@ -134,9 +134,11 @@ def launch_fleet(instance_types,targetCapacity,bootscript,dry_run=False,region='
 	
 	launch_specs=[]
 	# Loop over instance types and 
-	for instance_type in instance_types:
+	for instance_type,az_list in instance_types.iteritems():
 		print instance_type
-		for az,subnet in subnet_map.iteritems():
+#		for az,subnet in subnet_map.iteritems():
+		for az in az_list:
+			subnet=subnet_map[az]
 			print subnet
 			launch_spec=deepcopy(launch_template) 
 			launch_spec["InstanceType"]=instance_type
@@ -199,4 +201,8 @@ if __name__=='__main__':
 	'c4.4xlarge',
 	'm3.2xlarge',
 	'r3.large']
-	spot_fleet_id=launch_fleet(instances,40,'aws_bootscript_boinc.sh',dry_run=False,region='us-west-2')
+	region='us-east-1'
+	
+	instances_ok=instances_filtered(instances,region=region)
+	print instances_ok
+	spot_fleet_id=launch_fleet(instances_ok,35,'aws_bootscript_boinc.sh',dry_run=True,region=region)

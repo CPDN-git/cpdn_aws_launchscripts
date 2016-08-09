@@ -33,8 +33,11 @@ def plot_timings(types,runs):
 	typex=range(len(types))
 	plt.xticks(typex,rotation=90)
 	plt.ylabel('run time (minutes)')
+	plt.xlim([-.5,i-.5])
 	ax.set_xticklabels(types)
-	plt.show()
+	plt.tight_layout()
+	plt.savefig('figure_1.pdf')
+#	plt.show()
 
 def write_timings(types,runs,instance_price,csv_fname):
 	with open(csv_fname, 'wb') as csvfile:
